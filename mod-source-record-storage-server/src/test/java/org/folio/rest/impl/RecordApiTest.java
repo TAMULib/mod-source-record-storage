@@ -1,31 +1,24 @@
 package org.folio.rest.impl;
 
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
-import static org.hamcrest.MatcherAssert.assertThat;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import org.apache.http.HttpStatus;
-import org.folio.TestUtil;
 import org.folio.dao.PostgresClientFactory;
 import org.folio.dao.util.SnapshotDaoUtil;
 import org.folio.rest.jaxrs.model.AdditionalInfo;
-import org.folio.rest.jaxrs.model.ErrorRecord;
 import org.folio.rest.jaxrs.model.ExternalIdsHolder;
 import org.folio.rest.jaxrs.model.ParsedRecord;
-import org.folio.rest.jaxrs.model.RawRecord;
 import org.folio.rest.jaxrs.model.Record;
 import org.folio.rest.jaxrs.model.RecordCollection;
-import org.folio.rest.jaxrs.model.Snapshot;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -41,123 +34,6 @@ import io.vertx.ext.unit.junit.VertxUnitRunner;
 
 @RunWith(VertxUnitRunner.class)
 public class RecordApiTest extends AbstractRestVerticleTest {
-
-  private static final String FIRST_MARC_UUID = UUID.randomUUID().toString();
-  private static final String SECOND_MARC_UUID = UUID.randomUUID().toString();
-  private static final String THIRD_MARC_UUID = UUID.randomUUID().toString();
-  private static final String FOURTH_MARC_UUID = UUID.randomUUID().toString();
-  private static final String FIFTH_MARC_UUID = UUID.randomUUID().toString();
-  private static final String FIRST_EDIFACT_UUID = UUID.randomUUID().toString();
-  private static final String SECOND_EDIFACT_UUID = UUID.randomUUID().toString();
-  private static final String THIRD_EDIFACT_UUID = UUID.randomUUID().toString();
-  private static final String FIFTH_EDIFACT_UUID = UUID.randomUUID().toString();
-
-  private static RawRecord rawMarcRecord;
-  private static ParsedRecord edifactRecord;
-  private static RawRecord rawEdifactRecord;
-  private static ParsedRecord marcRecord;
-
-  static {
-    try {
-      rawEdifactRecord = new RawRecord()
-        .withContent(new ObjectMapper().readValue(TestUtil.readFileFromPath(RAW_EDIFACT_RECORD_CONTENT_SAMPLE_PATH), String.class));
-      edifactRecord = new ParsedRecord()
-        .withContent(new ObjectMapper().readValue(TestUtil.readFileFromPath(PARSED_EDIFACT_RECORD_CONTENT_SAMPLE_PATH), JsonObject.class).encode());
-      rawMarcRecord = new RawRecord()
-        .withContent(new ObjectMapper().readValue(TestUtil.readFileFromPath(RAW_RECORD_CONTENT_SAMPLE_PATH), String.class));
-      marcRecord = new ParsedRecord()
-        .withContent(new ObjectMapper().readValue(TestUtil.readFileFromPath(PARSED_RECORD_CONTENT_SAMPLE_PATH), JsonObject.class).encode());
-    } catch (IOException e) {
-      e.printStackTrace();
-    }
-  }
-
-  private static ParsedRecord invalidParsedRecord = new ParsedRecord()
-    .withContent("Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.");
-  private static ErrorRecord errorRecord = new ErrorRecord()
-    .withDescription("Oops... something happened")
-    .withContent("Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.");
-  private static Snapshot marc_snapshot_1 = new Snapshot()
-    .withJobExecutionId(UUID.randomUUID().toString())
-    .withStatus(Snapshot.Status.PARSING_IN_PROGRESS);
-  private static Snapshot marc_snapshot_2 = new Snapshot()
-    .withJobExecutionId(UUID.randomUUID().toString())
-    .withStatus(Snapshot.Status.PARSING_IN_PROGRESS);
-  private static Snapshot edifact_snapshot_1 = new Snapshot()
-    .withJobExecutionId(UUID.randomUUID().toString())
-    .withStatus(Snapshot.Status.PARSING_IN_PROGRESS);
-  private static Snapshot edifact_snapshot_2 = new Snapshot()
-    .withJobExecutionId(UUID.randomUUID().toString())
-    .withStatus(Snapshot.Status.PARSING_IN_PROGRESS);
-  private static Record marc_record_1 = new Record()
-    .withId(FIRST_MARC_UUID)
-    .withSnapshotId(marc_snapshot_1.getJobExecutionId())
-    .withRecordType(Record.RecordType.MARC)
-    .withRawRecord(rawMarcRecord)
-    .withMatchedId(FIRST_MARC_UUID)
-    .withOrder(0)
-    .withState(Record.State.ACTUAL);
-  private static Record marc_record_2 = new Record()
-    .withId(SECOND_MARC_UUID)
-    .withSnapshotId(marc_snapshot_2.getJobExecutionId())
-    .withRecordType(Record.RecordType.MARC)
-    .withRawRecord(rawMarcRecord)
-    .withParsedRecord(marcRecord)
-    .withMatchedId(SECOND_MARC_UUID)
-    .withOrder(11)
-    .withState(Record.State.ACTUAL);
-  private static Record marc_record_3 = new Record()
-    .withId(THIRD_MARC_UUID)
-    .withSnapshotId(marc_snapshot_2.getJobExecutionId())
-    .withRecordType(Record.RecordType.MARC)
-    .withRawRecord(rawMarcRecord)
-    .withErrorRecord(errorRecord)
-    .withMatchedId(THIRD_MARC_UUID)
-    .withState(Record.State.ACTUAL);
-  private static Record marc_record_5 = new Record()
-    .withId(FIFTH_MARC_UUID)
-    .withSnapshotId(marc_snapshot_2.getJobExecutionId())
-    .withRecordType(Record.RecordType.MARC)
-    .withRawRecord(rawMarcRecord)
-    .withMatchedId(FIFTH_MARC_UUID)
-    .withParsedRecord(invalidParsedRecord)
-    .withOrder(101)
-    .withState(Record.State.ACTUAL);
-    private static Record edifact_record_1 = new Record()
-    .withId(FIRST_EDIFACT_UUID)
-    .withSnapshotId(edifact_snapshot_1.getJobExecutionId())
-    .withRecordType(Record.RecordType.EDIFACT)
-    .withRawRecord(rawEdifactRecord)
-    .withMatchedId(FIRST_EDIFACT_UUID)
-    .withOrder(0)
-    .withState(Record.State.ACTUAL);
-  private static Record edifact_record_2 = new Record()
-    .withId(SECOND_EDIFACT_UUID)
-    .withSnapshotId(edifact_snapshot_2.getJobExecutionId())
-    .withRecordType(Record.RecordType.EDIFACT)
-    .withRawRecord(rawEdifactRecord)
-    .withParsedRecord(edifactRecord)
-    .withMatchedId(SECOND_EDIFACT_UUID)
-    .withOrder(11)
-    .withState(Record.State.ACTUAL);
-  private static Record edifact_record_3 = new Record()
-    .withId(THIRD_EDIFACT_UUID)
-    .withSnapshotId(edifact_snapshot_2.getJobExecutionId())
-    .withRecordType(Record.RecordType.EDIFACT)
-    .withRawRecord(rawEdifactRecord)
-    .withErrorRecord(errorRecord)
-    .withMatchedId(THIRD_EDIFACT_UUID)
-    .withState(Record.State.ACTUAL);
-  private static Record edifact_record_5 = new Record()
-    .withId(FIFTH_EDIFACT_UUID)
-    .withSnapshotId(edifact_snapshot_2.getJobExecutionId())
-    .withRecordType(Record.RecordType.EDIFACT)
-    .withRawRecord(rawEdifactRecord)
-    .withMatchedId(FIFTH_EDIFACT_UUID)
-    .withParsedRecord(invalidParsedRecord)
-    .withOrder(101)
-    .withState(Record.State.ACTUAL);
-
   @Before
   public void setUp(TestContext context) {
     Async async = context.async();
