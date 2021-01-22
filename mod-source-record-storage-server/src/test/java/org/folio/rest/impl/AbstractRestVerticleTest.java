@@ -25,12 +25,14 @@ import org.folio.rest.jaxrs.model.RawRecord;
 import org.folio.rest.jaxrs.model.Record;
 import org.folio.rest.jaxrs.model.Snapshot;
 import org.folio.rest.jaxrs.model.TenantAttributes;
-import org.folio.rest.persist.PostgresClient;
+import org.folio.rest.tools.PomReader;
+import org.folio.rest.tools.utils.Envs;
 import org.folio.rest.tools.utils.NetworkUtils;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
+import org.testcontainers.containers.PostgreSQLContainer;
 
 import io.restassured.RestAssured;
 import io.restassured.builder.RequestSpecBuilder;
@@ -43,6 +45,8 @@ import io.vertx.ext.unit.TestContext;
 import io.vertx.reactivex.core.Vertx;
 
 public abstract class AbstractRestVerticleTest {
+
+  private static PostgreSQLContainer<?> postgresSQLContainer;
 
   static final String TENANT_ID = "diku";
 
@@ -218,6 +222,7 @@ public abstract class AbstractRestVerticleTest {
     vertx = Vertx.vertx();
     okapiPort = NetworkUtils.nextFreePort();
     String okapiUrl = "http://localhost:" + okapiPort;
+
     useExternalDatabase = System.getProperty(
       "org.folio.source.storage.test.database",
       "embedded");
@@ -230,11 +235,20 @@ public abstract class AbstractRestVerticleTest {
         String postgresConfigPath = System.getProperty(
           "org.folio.source.storage.test.config",
           "/postgres-conf-local.json");
-        PostgresClient.setConfigFilePath(postgresConfigPath);
+        PostgresClientFactory.setConfigFilePath(postgresConfigPath);
         break;
       case "embedded":
-        PostgresClient.setIsEmbedded(true);
-        PostgresClient.getInstance(vertx.getDelegate()).startEmbeddedPostgres();
+        String postgresImage = PomReader.INSTANCE.getProps().getProperty("postgres.image");
+        postgresSQLContainer = new PostgreSQLContainer<>(postgresImage);
+        postgresSQLContainer.start();
+    
+        Envs.setEnv(
+          postgresSQLContainer.getHost(),
+          postgresSQLContainer.getFirstMappedPort(),
+          postgresSQLContainer.getUsername(),
+          postgresSQLContainer.getPassword(),
+          postgresSQLContainer.getDatabaseName()
+        );
         break;
       default:
         String message = "No understood database choice made." +
@@ -286,7 +300,7 @@ public abstract class AbstractRestVerticleTest {
     PostgresClientFactory.closeAll();
     vertx.close(context.asyncAssertSuccess(res -> {
       if (useExternalDatabase.equals("embedded")) {
-        PostgresClient.stopEmbeddedPostgres();
+        postgresSQLContainer.stop();
       }
       async.complete();
     }));
